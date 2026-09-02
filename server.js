@@ -600,6 +600,10 @@ function handlePlayerLeaving(socket) {
   }
 }
 
+server.get("/alive", (req, res) => {
+  res.send("OK Site Alive!");
+});
+
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
