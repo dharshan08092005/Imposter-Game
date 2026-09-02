@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Imposter - Word Game</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Plus+Jakarta+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="glass-bg"></div>
+  <div class="glow-effects">
+    <div class="glow-1"></div>
+    <div class="glow-2"></div>
+  </div>
+
+  <main class="app-container">
+    <!-- LANDING SCREEN -->
+    <section id="landing-screen" class="screen active">
+      <div class="hero-brand">
+        <h1 class="logo">IMPOSTER</h1>
+        <p class="subtitle">A real-time multiplayer word deduction game</p>
+      </div>
+
+      <div class="card glass-card home-card">
+        <div class="form-group">
+          <label for="player-name">Your Name</label>
+          <input type="text" id="player-name" placeholder="Enter your name..." autocomplete="off" maxlength="15">
+        </div>
+
+        <div class="action-divider"><span>Host a Room</span></div>
+        <button id="create-room-btn" class="btn btn-primary btn-glow">Create New Game</button>
+
+        <div class="action-divider"><span>Or Join Existing</span></div>
+        <div class="join-row">
+          <input type="text" id="room-code-input" placeholder="6-digit code" autocomplete="off" maxlength="6">
+          <button id="join-room-btn" class="btn btn-secondary">Join Game</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- LOBBY SCREEN -->
+    <section id="lobby-screen" class="screen">
+      <div class="screen-header">
+        <div>
+          <span class="badge">Lobby</span>
+          <h2 class="room-code-title">ROOM: <span id="lobby-code-display" class="highlight">------</span></h2>
+        </div>
+        <button id="lobby-leave-btn" class="btn btn-danger-text">Leave</button>
+      </div>
+
+      <div class="lobby-grid">
+        <!-- Players List -->
+        <div class="card glass-card player-list-card">
+          <h3>Players (<span id="player-count">0</span>)</h3>
+          <div id="lobby-players-container" class="players-list">
+            <!-- Dynamic list of players -->
+          </div>
+        </div>
+
+        <!-- Host Settings & Actions -->
+        <div class="card glass-card settings-card">
+          <h3>Game Settings</h3>
+          
+          <div class="setting-item">
+            <div class="setting-info">
+              <label for="setting-imposters">Imposters Count</label>
+              <p class="setting-desc">Number of imposters in the game</p>
+            </div>
+            <select id="setting-imposters" class="select-input">
+              <option value="1">1 Imposter</option>
+              <option value="2">2 Imposters</option>
+              <option value="3">3 Imposters</option>
+            </select>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-info">
+              <label for="setting-duration">Turn Duration</label>
+              <p class="setting-desc">Time limit per turn (seconds)</p>
+            </div>
+            <select id="setting-duration" class="select-input">
+              <option value="15">15 seconds</option>
+              <option value="20" selected>20 seconds</option>
+              <option value="30">30 seconds</option>
+              <option value="45">45 seconds</option>
+            </select>
+          </div>
+
+          <div class="lobby-actions">
+            <!-- Non-hosts toggle ready status -->
+            <button id="lobby-ready-btn" class="btn btn-secondary btn-full">Ready Up</button>
+            <!-- Host starts game -->
+            <button id="lobby-start-btn" class="btn btn-primary btn-glow btn-full" style="display: none;">Start Game</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- GAME PLAYING SCREEN -->
+    <section id="game-screen" class="screen">
+      <div class="game-header-bar">
+        <div class="game-meta">
+          <span class="badge badge-accent">Round <span id="game-round-display">1</span></span>
+          <span id="turn-badge" class="badge">Turn: <span id="current-turn-player-name">...</span></span>
+        </div>
+        <button id="game-leave-btn" class="btn btn-danger-text">Leave</button>
+      </div>
+
+      <!-- Secret Info Cards (Role & Word) -->
+      <div id="role-display-container">
+        <!-- Dynamic based on role -->
+      </div>
+
+      <div class="game-main-layout">
+        <!-- Clue Submission (visible only on active player's turn) -->
+        <div id="clue-input-panel" class="card glass-card submission-card" style="display: none;">
+          <h3>It's Your Turn!</h3>
+          <p class="input-instruction" id="clue-instruction-text">Submit your clue...</p>
+          <div class="clue-form">
+            <input type="text" id="clue-text-input" placeholder="Type your one-sentence clue here..." maxlength="120" autocomplete="off">
+            <button id="submit-clue-btn" class="btn btn-primary btn-glow">Submit Clue</button>
+          </div>
+          <div id="clue-error-msg" class="validation-error" style="display: none;"></div>
+        </div>
+
+        <!-- Clue Logs / History -->
+        <div class="card glass-card logs-card">
+          <h3>Clue Discussion</h3>
+          <div id="clues-log-container" class="clues-timeline">
+            <!-- Clues listed dynamically -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VOTING SCREEN -->
+    <section id="voting-screen" class="screen">
+      <div class="screen-header">
+        <div>
+          <span class="badge badge-warning">Voting Phase</span>
+          <h2>Who is the Imposter?</h2>
+          <p class="subtitle">Discuss clues and cast your vote below.</p>
+        </div>
+      </div>
+
+      <div class="voting-layout">
+        <div class="card glass-card voting-card">
+          <div id="voting-players-grid" class="voting-grid">
+            <!-- List of alive players to vote for -->
+          </div>
+          <div id="voting-status-text" class="voting-footer">
+            Waiting for players to submit votes...
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- GAME OVER SCREEN -->
+    <section id="gameover-screen" class="screen">
+      <div class="gameover-banner card glass-card">
+        <span class="badge badge-danger">Game Ended</span>
+        <h1 id="winner-announcement" class="winner-title">CREWMATES WIN</h1>
+        
+        <div class="secret-word-reveal">
+          <span class="label">Secret Word</span>
+          <span id="revealed-secret-word" class="word">BEACH</span>
+        </div>
+
+        <div class="imposters-reveal">
+          <span class="label">Imposters</span>
+          <div id="revealed-imposters-list" class="imposters-tags">
+            <!-- List of imposters -->
+          </div>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="card glass-card stats-card">
+          <h3>Elimination Order</h3>
+          <table class="elimination-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Player</th>
+                <th>Role</th>
+              </tr>
+            </thead>
+            <tbody id="elimination-table-body">
+              <!-- Dynamic rows -->
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card glass-card stats-summary-card">
+          <h3>Match Summary</h3>
+          <div class="summary-details">
+            <div class="summary-item">
+              <span class="summary-label">Rounds Played</span>
+              <span id="summary-rounds" class="summary-value">0</span>
+            </div>
+            <div class="summary-item">
+              <span class="summary-label">Total Players</span>
+              <span id="summary-players" class="summary-value">0</span>
+            </div>
+          </div>
+
+          <!-- Play Again Action Panel -->
+          <div class="gameover-actions">
+            <!-- Normal player waiting banner -->
+            <div id="non-host-play-again-msg" class="play-again-wait-banner" style="display: none;">
+              Waiting for the host to start another game...
+            </div>
+            
+            <!-- Host Action -->
+            <button id="host-play-again-btn" class="btn btn-primary btn-glow btn-full" style="display: none;">🔄 PLAY AGAIN</button>
+            <button id="return-home-btn" class="btn btn-secondary btn-full">🏠 RETURN TO HOME</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- CONFIRMATION DIALOG -->
+  <div id="confirmation-dialog" class="modal-overlay">
+    <div class="modal-card glass-card">
+      <h2>Start another game?</h2>
+      <p>All players will return to the lobby and receive new roles and a new word.</p>
+      <div class="modal-buttons">
+        <button id="confirm-cancel-btn" class="btn btn-secondary">CANCEL</button>
+        <button id="confirm-ok-btn" class="btn btn-primary btn-glow">PLAY AGAIN</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATIONS -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Scripts -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="client.js" type="module"></script>
+</body>
+</html>
