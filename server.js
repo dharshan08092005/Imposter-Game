@@ -600,7 +600,7 @@ function handlePlayerLeaving(socket) {
   }
 }
 
-server.get("/alive", (req, res) => {
+app.get("/alive", (req, res) => {
   res.send("OK Site Alive!");
 });
 
