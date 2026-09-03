@@ -1,26 +1,30 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Imposter - Word Game</title>
+  <title>Imposter Game – Multiplayer Word Deduction & Bluffing Game</title>
 
   <!-- SEO Meta Tags -->
-  <meta name="description" content="A real-time multiplayer word deduction game. Spot the imposter among your friends with subtle clues and group voting.">
+  <meta name="description"
+    content="Play a real-time multiplayer imposter game with friends. Give clues, bluff your way through the round, and vote to find the player who doesn't know the secret word.">
   <meta name="robots" content="index, follow">
-  <link rel="canonical" href="/">
+  <link rel="canonical" href="https://imposter.voicepy.in/">
 
   <!-- Open Graph / Facebook -->
   <meta property="og:type" content="website">
   <meta property="og:title" content="Imposter - Multiplayer Word Deduction Game">
-  <meta property="og:description" content="A real-time multiplayer word deduction game. Spot the imposter among your friends with subtle clues and group voting.">
+  <meta property="og:description"
+    content="A real-time multiplayer word deduction game. Spot the imposter among your friends with subtle clues and group voting.">
   <meta property="og:image" content="/favicon.png">
   <meta property="og:url" content="/">
 
   <!-- Twitter / X -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Imposter - Word Deduction Game">
-  <meta name="twitter:description" content="A real-time multiplayer word deduction game. Spot the imposter among your friends with subtle clues and group voting.">
+  <meta name="twitter:description"
+    content="A real-time multiplayer word deduction game. Spot the imposter among your friends with subtle clues and group voting.">
   <meta name="twitter:image" content="/favicon.png">
 
   <!-- Favicons -->
@@ -44,9 +48,12 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Plus+Jakarta+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Plus+Jakarta+Sans:wght@400;500;700&display=swap"
+    rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
   <div class="glass-bg"></div>
   <div class="glow-effects">
@@ -73,7 +80,8 @@
 
         <div class="action-divider"><span>Or Join Existing</span></div>
         <div class="join-row">
-          <input type="text" id="room-code-input" placeholder="6-digit code" autocomplete="off" maxlength="6" aria-label="6-digit room code">
+          <input type="text" id="room-code-input" placeholder="6-digit code" autocomplete="off" maxlength="6"
+            aria-label="6-digit room code">
           <button id="join-room-btn" class="btn btn-secondary">Join Game</button>
         </div>
       </div>
@@ -101,7 +109,7 @@
         <!-- Host Settings & Actions -->
         <div class="card glass-card settings-card">
           <h3>Game Settings</h3>
-          
+
           <div class="setting-item">
             <div class="setting-info">
               <label for="setting-imposters">Imposters Count</label>
@@ -131,7 +139,8 @@
             <!-- Non-hosts toggle ready status -->
             <button id="lobby-ready-btn" class="btn btn-secondary btn-full">Ready Up</button>
             <!-- Host starts game -->
-            <button id="lobby-start-btn" class="btn btn-primary btn-glow btn-full" style="display: none;">Start Game</button>
+            <button id="lobby-start-btn" class="btn btn-primary btn-glow btn-full" style="display: none;">Start
+              Game</button>
           </div>
         </div>
       </div>
@@ -158,7 +167,8 @@
           <h3>It's Your Turn!</h3>
           <p class="input-instruction" id="clue-instruction-text">Submit your clue...</p>
           <div class="clue-form">
-            <input type="text" id="clue-text-input" placeholder="Type your one-sentence clue here..." maxlength="120" autocomplete="off" aria-label="Your clue">
+            <input type="text" id="clue-text-input" placeholder="Type your one-sentence clue here..." maxlength="120"
+              autocomplete="off" aria-label="Your clue">
             <button id="submit-clue-btn" class="btn btn-primary btn-glow">Submit Clue</button>
           </div>
           <div id="clue-error-msg" class="validation-error" style="display: none;"></div>
@@ -201,7 +211,7 @@
       <div class="gameover-banner card glass-card">
         <span class="badge badge-danger">Game Ended</span>
         <h2 id="winner-announcement" class="winner-title">CREWMATES WIN</h2>
-        
+
         <div class="secret-word-reveal">
           <span class="label">Secret Word</span>
           <span id="revealed-secret-word" class="word">BEACH</span>
@@ -251,9 +261,10 @@
             <div id="non-host-play-again-msg" class="play-again-wait-banner" style="display: none;">
               Waiting for the host to start another game...
             </div>
-            
+
             <!-- Host Action -->
-            <button id="host-play-again-btn" class="btn btn-primary btn-glow btn-full" style="display: none;">🔄 PLAY AGAIN</button>
+            <button id="host-play-again-btn" class="btn btn-primary btn-glow btn-full" style="display: none;">🔄 PLAY
+              AGAIN</button>
             <button id="return-home-btn" class="btn btn-secondary btn-full">🏠 RETURN TO HOME</button>
           </div>
         </div>
@@ -280,4 +291,5 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="client.js" type="module"></script>
 </body>
+
 </html>
