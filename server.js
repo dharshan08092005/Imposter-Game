@@ -13,8 +13,7 @@ const PORT = process.env.PORT || 3000;
 // Serve static files from public directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-// In-memory room store
-// roomCode -> Room
+// In-memory room store: roomCode -> Room
 const rooms = new Map();
 
 // Map of socket.id -> { roomCode, name }
@@ -29,14 +28,38 @@ function generateRoomCode() {
   return code;
 }
 
+// Helper to get available public rooms in LOBBY state
+function getAvailableRooms() {
+  const list = [];
+  for (const [code, room] of rooms.entries()) {
+    if (room.state === 'LOBBY') {
+      const hostPlayer = room.players.find(p => p.id === room.hostId);
+      list.push({
+        code: room.code,
+        hostName: hostPlayer ? hostPlayer.name : 'Host',
+        playerCount: room.players.length,
+        maxPlayers: 10,
+        settings: room.settings
+      });
+    }
+  }
+  return list;
+}
+
+// Broadcast available rooms list to all clients
+function broadcastAvailableRooms() {
+  io.emit('availableRoomsUpdate', getAvailableRooms());
+}
+
 // Helper to get sanitized room state for a specific player
 function getSanitizedRoomState(room, playerId) {
   const player = room.players.find(p => p.id === playerId);
   if (!player) return null;
 
+  const isHost = room.hostId === playerId;
+
   // Mask sensitive info
   const sanitizedPlayers = room.players.map(p => {
-    const isSelf = p.id === playerId;
     const revealRole = room.state === 'GAMEOVER' || !p.isAlive;
     return {
       id: p.id,
@@ -55,6 +78,20 @@ function getSanitizedRoomState(room, playerId) {
     ? room.players.filter(p => p.role === 'IMPOSTER' && p.id !== playerId).map(p => p.name)
     : [];
 
+  // Hint for imposter if imposter came as first in round
+  const isFirstInRound = (room.roundFirstPlayerId === playerId);
+  let imposterHint = null;
+  if (isImposter && isFirstInRound && room.state === 'PLAYING') {
+    imposterHint = `The secret category is "${room.currentCategory}" (${room.currentWord ? room.currentWord.length : 0} letters).`;
+  }
+
+  // Determine winner status for GAMEOVER
+  let winner = room.winner;
+  if (!winner && room.state === 'GAMEOVER') {
+    const aliveImposters = room.players.filter(p => p.isAlive && p.role === 'IMPOSTER').length;
+    winner = (aliveImposters === 0) ? 'CREWMATE' : 'IMPOSTER';
+  }
+
   return {
     code: room.code,
     state: room.state,
@@ -66,12 +103,20 @@ function getSanitizedRoomState(room, playerId) {
     messages: room.messages,
     round: room.round,
     eliminationOrder: room.eliminationOrder,
+    isReviewing: !!room.isReviewing,
+    reviewEndsAt: room.reviewEndsAt || null,
+    // Pending requests visible only to the room host while in LOBBY
+    pendingRequests: isHost && room.state === 'LOBBY' ? room.pendingRequests : [],
     // Secret info
     myRole: player.role,
     myWord: (!isImposter && room.state !== 'LOBBY') ? room.currentWord : null,
     myCategory: (!isImposter && room.state !== 'LOBBY') ? room.currentCategory : null,
     otherImposters: otherImposters,
+    imposterHint: imposterHint,
     // Game over details
+    winner: winner,
+    winReason: room.winReason || null,
+    guesserName: room.guesserName || null,
     secretWord: room.state === 'GAMEOVER' ? room.currentWord : null,
     imposterNames: room.state === 'GAMEOVER' ? room.players.filter(p => p.role === 'IMPOSTER').map(p => p.name) : [],
     votesTally: room.state === 'GAMEOVER' || room.state === 'VOTING' ? room.votes : null
@@ -91,7 +136,12 @@ function broadcastRoomState(roomCode) {
 
 // Setup Socket connections
 io.on('connection', (socket) => {
-  console.log(`Socket connected: ${socket.id}`);
+  // Send available rooms on initial connection
+  socket.emit('availableRoomsUpdate', getAvailableRooms());
+
+  socket.on('getAvailableRooms', () => {
+    socket.emit('availableRoomsUpdate', getAvailableRooms());
+  });
 
   // Create room
   socket.on('createRoom', (hostName) => {
@@ -109,10 +159,11 @@ io.on('connection', (socket) => {
         isHost: true,
         isAlive: true,
         role: null,
-        isReady: true, // Host is ready by default
+        isReady: true,
         hasSubmittedClue: false,
         votedFor: null
       }],
+      pendingRequests: [],
       settings: {
         imposterCount: 1,
         turnDuration: 20
@@ -121,22 +172,29 @@ io.on('connection', (socket) => {
       currentCategory: null,
       previousWords: [],
       currentPlayerTurnId: null,
+      roundFirstPlayerId: null,
       turnOrder: [],
       messages: [],
       votes: {},
       round: 0,
-      eliminationOrder: []
+      eliminationOrder: [],
+      winner: null,
+      winReason: null,
+      guesserName: null,
+      isReviewing: false,
+      reviewEndsAt: null,
+      reviewTimeout: null
     };
 
     rooms.set(code, newRoom);
     socketToPlayer.set(socket.id, { roomCode: code, name: hostName.trim() });
     socket.join(code);
     
-    console.log(`Room created: ${code} by ${hostName}`);
     broadcastRoomState(code);
+    broadcastAvailableRooms();
   });
 
-  // Join room
+  // Join room request
   socket.on('joinRoom', ({ code, name }) => {
     if (!code || !name) {
       return socket.emit('errorMsg', 'Room code and name are required.');
@@ -150,27 +208,101 @@ io.on('connection', (socket) => {
     }
     
     const formattedName = name.trim();
-    if (room.players.some(p => p.name.toLowerCase() === formattedName.toLowerCase())) {
+    if (room.players.some(p => p.name.toLowerCase() === formattedName.toLowerCase()) ||
+        room.pendingRequests.some(r => r.name.toLowerCase() === formattedName.toLowerCase())) {
       return socket.emit('errorMsg', 'Name already taken in this room.');
     }
 
-    const newPlayer = {
+    if (room.players.length >= 10) {
+      return socket.emit('errorMsg', 'Room is currently full (max 10 players).');
+    }
+
+    // Check if already requested
+    if (room.pendingRequests.some(r => r.id === socket.id)) {
+      return socket.emit('errorMsg', 'You have already requested to join this room.');
+    }
+
+    const hostPlayer = room.players.find(p => p.id === room.hostId);
+    const requestItem = {
       id: socket.id,
       name: formattedName,
-      isHost: false,
-      isAlive: true,
-      role: null,
-      isReady: false,
-      hasSubmittedClue: false,
-      votedFor: null
+      requestedAt: Date.now()
     };
+    room.pendingRequests.push(requestItem);
 
-    room.players.push(newPlayer);
-    socketToPlayer.set(socket.id, { roomCode: code, name: formattedName });
-    socket.join(code);
+    // Notify joining player of pending state
+    socket.emit('joinRequested', {
+      code: room.code,
+      hostName: hostPlayer ? hostPlayer.name : 'Room Head'
+    });
 
-    console.log(`Player ${formattedName} joined room ${code}`);
-    broadcastRoomState(code);
+    // Notify host of updated pending requests
+    io.to(room.hostId).emit('pendingRequestsUpdate', room.pendingRequests);
+    broadcastRoomState(room.code);
+  });
+
+  // Cancel join request
+  socket.on('cancelJoinRequest', () => {
+    for (const room of rooms.values()) {
+      const idx = room.pendingRequests.findIndex(r => r.id === socket.id);
+      if (idx !== -1) {
+        room.pendingRequests.splice(idx, 1);
+        io.to(room.hostId).emit('pendingRequestsUpdate', room.pendingRequests);
+        broadcastRoomState(room.code);
+      }
+    }
+    socket.emit('joinCancelled');
+  });
+
+  // Host responds to join request (Accept or Decline)
+  socket.on('respondJoinRequest', ({ requestId, accept }) => {
+    const playerInfo = socketToPlayer.get(socket.id);
+    if (!playerInfo) return;
+
+    const room = rooms.get(playerInfo.roomCode);
+    if (!room || room.hostId !== socket.id) return;
+
+    const reqIdx = room.pendingRequests.findIndex(r => r.id === requestId);
+    if (reqIdx === -1) return;
+
+    const [pendingReq] = room.pendingRequests.splice(reqIdx, 1);
+    io.to(room.hostId).emit('pendingRequestsUpdate', room.pendingRequests);
+
+    if (accept) {
+      if (room.state !== 'LOBBY') {
+        return io.to(pendingReq.id).emit('errorMsg', 'Game has already started.');
+      }
+      if (room.players.length >= 10) {
+        return io.to(pendingReq.id).emit('errorMsg', 'Room is now full.');
+      }
+
+      const targetSocket = io.sockets.sockets.get(pendingReq.id);
+      if (!targetSocket) return; // Player disconnected
+
+      const newPlayer = {
+        id: pendingReq.id,
+        name: pendingReq.name,
+        isHost: false,
+        isAlive: true,
+        role: null,
+        isReady: false,
+        hasSubmittedClue: false,
+        votedFor: null
+      };
+
+      room.players.push(newPlayer);
+      socketToPlayer.set(pendingReq.id, { roomCode: room.code, name: pendingReq.name });
+      targetSocket.join(room.code);
+
+      targetSocket.emit('joinAccepted');
+      broadcastRoomState(room.code);
+      broadcastAvailableRooms();
+    } else {
+      io.to(pendingReq.id).emit('joinRejected', {
+        message: 'The room host declined your join request.'
+      });
+      broadcastRoomState(room.code);
+    }
   });
 
   // Update Settings (Host only)
@@ -217,16 +349,22 @@ io.on('connection', (socket) => {
     if (room.state !== 'LOBBY') return;
 
     const playerCount = room.players.length;
-    const requiredMinPlayers = room.settings.imposterCount + 2; // Need at least (imposters + 2) to play reasonably
+    const requiredMinPlayers = room.settings.imposterCount + 2;
     if (playerCount < requiredMinPlayers) {
       return socket.emit('errorMsg', `At least ${requiredMinPlayers} players are required to start with ${room.settings.imposterCount} imposter(s).`);
     }
 
-    // Check if all players are ready
+    // Check if all non-host players are ready
     const unreadyPlayers = room.players.filter(p => !p.isReady);
     if (unreadyPlayers.length > 0) {
       return socket.emit('errorMsg', 'Wait for all players to be ready.');
     }
+
+    // Reject any leftover pending requests because game is starting
+    room.pendingRequests.forEach(req => {
+      io.to(req.id).emit('joinRejected', { message: 'Game has already started.' });
+    });
+    room.pendingRequests = [];
 
     // Select Secret Word
     const { category, word } = getRandomWord(room.previousWords);
@@ -240,7 +378,6 @@ io.on('connection', (socket) => {
     }
 
     // Assign Roles
-    // Reset all status first
     room.players.forEach(p => {
       p.role = 'CREWMATE';
       p.isAlive = true;
@@ -264,10 +401,14 @@ io.on('connection', (socket) => {
     room.messages = [];
     room.votes = {};
     room.eliminationOrder = [];
+    room.winner = null;
+    room.winReason = null;
+    room.guesserName = null;
 
     // Select starting player randomly
     const startIdx = Math.floor(Math.random() * room.players.length);
     room.startingPlayerId = room.players[startIdx].id;
+    room.roundFirstPlayerId = room.startingPlayerId;
     room.currentPlayerTurnId = room.startingPlayerId;
 
     // Create turn order starting from the chosen player
@@ -278,8 +419,8 @@ io.on('connection', (socket) => {
     }
     room.turnOrder = order;
 
-    console.log(`Game started in room ${room.code}. Word: ${word}, Imposters: ${imposters.length}`);
     broadcastRoomState(room.code);
+    broadcastAvailableRooms();
   });
 
   // Submit clue
@@ -299,8 +440,24 @@ io.on('connection', (socket) => {
       return socket.emit('errorMsg', "Clue cannot be empty.");
     }
 
-    // Server-side validation to prevent revealing secret word
-    if (formattedClue.toUpperCase() === room.currentWord.toUpperCase()) {
+    const player = room.players.find(p => p.id === socket.id);
+    if (!player) return;
+
+    const isMatch = formattedClue.toUpperCase().replace(/\s+/g, ' ') === room.currentWord.toUpperCase().replace(/\s+/g, ' ');
+
+    // If IMPOSTER guesses the correct word in clue -> IMPOSTER WINS IMMEDIATELY!
+    if (player.role === 'IMPOSTER' && isMatch) {
+      room.state = 'GAMEOVER';
+      room.winner = 'IMPOSTER';
+      room.winReason = 'GUESS';
+      room.guesserName = player.name;
+      broadcastRoomState(room.code);
+      broadcastAvailableRooms();
+      return;
+    }
+
+    // Server-side validation to prevent crewmates directly revealing secret word
+    if (isMatch) {
       return socket.emit('errorMsg', "You cannot directly reveal the secret word. Give another clue.");
     }
 
@@ -312,14 +469,10 @@ io.on('connection', (socket) => {
       timestamp: Date.now()
     });
 
-    const player = room.players.find(p => p.id === socket.id);
-    if (player) {
-      player.hasSubmittedClue = true;
-    }
+    player.hasSubmittedClue = true;
 
     // Advance turn to next alive player
     const currentIdx = room.turnOrder.indexOf(socket.id);
-    let nextIdx = currentIdx;
     let nextPlayer = null;
 
     for (let i = 1; i <= room.turnOrder.length; i++) {
@@ -334,15 +487,113 @@ io.on('connection', (socket) => {
 
     if (nextPlayer) {
       room.currentPlayerTurnId = nextPlayer.id;
+      broadcastRoomState(room.code);
     } else {
-      // Everyone alive has submitted clues. Move to VOTING.
-      room.state = 'VOTING';
+      // Everyone alive has submitted clues. Give players 5 seconds to review clues before voting!
       room.currentPlayerTurnId = null;
-      room.players.forEach(p => p.votedFor = null);
-      room.votes = {};
+      room.isReviewing = true;
+      room.reviewEndsAt = Date.now() + 5000;
+      broadcastRoomState(room.code);
+
+      if (room.reviewTimeout) {
+        clearTimeout(room.reviewTimeout);
+      }
+
+      room.reviewTimeout = setTimeout(() => {
+        const curRoom = rooms.get(room.code);
+        if (!curRoom || curRoom.state !== 'PLAYING') return;
+
+        curRoom.isReviewing = false;
+        curRoom.reviewEndsAt = null;
+        curRoom.reviewTimeout = null;
+
+        curRoom.state = 'VOTING';
+        curRoom.currentPlayerTurnId = null;
+        curRoom.players.forEach(p => p.votedFor = null);
+        curRoom.votes = {};
+        broadcastRoomState(curRoom.code);
+      }, 5000);
+    }
+  });
+
+  // Dedicated Imposter Guess Action
+  socket.on('imposterGuessWord', (guessText) => {
+    const playerInfo = socketToPlayer.get(socket.id);
+    if (!playerInfo) return;
+
+    const room = rooms.get(playerInfo.roomCode);
+    if (!room || (room.state !== 'PLAYING' && room.state !== 'VOTING')) return;
+
+    const player = room.players.find(p => p.id === socket.id);
+    if (!player || !player.isAlive || player.role !== 'IMPOSTER') {
+      return socket.emit('errorMsg', "Only an active Imposter can guess the secret word.");
     }
 
-    broadcastRoomState(room.code);
+    if (!guessText || typeof guessText !== 'string') {
+      return socket.emit('errorMsg', "Please enter a valid guess.");
+    }
+
+    const formattedGuess = guessText.trim().toUpperCase().replace(/\s+/g, ' ');
+    const targetWord = room.currentWord.toUpperCase().replace(/\s+/g, ' ');
+
+    if (formattedGuess === targetWord) {
+      // Imposters win immediately!
+      room.state = 'GAMEOVER';
+      room.winner = 'IMPOSTER';
+      room.winReason = 'GUESS';
+      room.guesserName = player.name;
+      broadcastRoomState(room.code);
+      broadcastAvailableRooms();
+    } else {
+      // Incorrect guess! Imposter is eliminated
+      player.isAlive = false;
+      room.eliminationOrder.push({
+        name: player.name,
+        role: 'IMPOSTER'
+      });
+
+      const aliveCrew = room.players.filter(p => p.isAlive && p.role === 'CREWMATE').length;
+      const aliveImposters = room.players.filter(p => p.isAlive && p.role === 'IMPOSTER').length;
+
+      if (aliveImposters === 0) {
+        room.state = 'GAMEOVER';
+        room.winner = 'CREWMATE';
+        room.winReason = 'ALL_IMPOSTERS_ELIMINATED';
+      } else if (aliveImposters >= aliveCrew) {
+        room.state = 'GAMEOVER';
+        room.winner = 'IMPOSTER';
+      } else {
+        // If it was this player's turn in PLAYING, advance turn
+        if (room.state === 'PLAYING' && room.currentPlayerTurnId === socket.id) {
+          const currentIdx = room.turnOrder.indexOf(socket.id);
+          let nextPlayer = null;
+          for (let i = 1; i <= room.turnOrder.length; i++) {
+            const checkIdx = (currentIdx + i) % room.turnOrder.length;
+            const pId = room.turnOrder[checkIdx];
+            const p = room.players.find(pl => pl.id === pId);
+            if (p && p.isAlive && !p.hasSubmittedClue) {
+              nextPlayer = p;
+              break;
+            }
+          }
+          if (nextPlayer) {
+            room.currentPlayerTurnId = nextPlayer.id;
+          } else {
+            room.state = 'VOTING';
+            room.currentPlayerTurnId = null;
+            room.players.forEach(p => p.votedFor = null);
+            room.votes = {};
+          }
+        }
+      }
+
+      socket.emit('guessResult', {
+        success: false,
+        message: `Incorrect guess! "${guessText.trim()}" was not the secret word.`
+      });
+      broadcastRoomState(room.code);
+      broadcastAvailableRooms();
+    }
   });
 
   // Submit vote
@@ -393,7 +644,6 @@ io.on('connection', (socket) => {
           role: eliminatedPlayer.role
         });
       } else {
-        // Tie or no votes cast at all
         room.eliminationOrder.push({
           name: "None (Tie / Skipped)",
           role: "N/A"
@@ -405,13 +655,11 @@ io.on('connection', (socket) => {
       const aliveImposters = room.players.filter(p => p.isAlive && p.role === 'IMPOSTER').length;
 
       if (aliveImposters === 0) {
-        // Crewmates win
         room.state = 'GAMEOVER';
-        console.log(`Room ${room.code}: Crewmates win!`);
+        room.winner = 'CREWMATE';
       } else if (aliveImposters >= aliveCrew) {
-        // Imposters win
         room.state = 'GAMEOVER';
-        console.log(`Room ${room.code}: Imposters win!`);
+        room.winner = 'IMPOSTER';
       } else {
         // Game continues -> start new round
         room.round += 1;
@@ -423,12 +671,16 @@ io.on('connection', (socket) => {
         // Pick new starting player among remaining alive players
         const aliveOnes = room.players.filter(p => p.isAlive);
         const randStart = aliveOnes[Math.floor(Math.random() * aliveOnes.length)];
+        room.roundFirstPlayerId = randStart.id;
         room.currentPlayerTurnId = randStart.id;
         room.state = 'PLAYING';
       }
     }
 
     broadcastRoomState(room.code);
+    if (room.state === 'GAMEOVER') {
+      broadcastAvailableRooms();
+    }
   });
 
   // Play Again (Host confirms)
@@ -441,32 +693,40 @@ io.on('connection', (socket) => {
       return socket.emit('errorMsg', "Only the host can trigger Play Again.");
     }
 
-    // Reset room state back to LOBBY
     room.state = 'LOBBY';
     room.currentWord = null;
     room.currentCategory = null;
     room.currentPlayerTurnId = null;
+    room.roundFirstPlayerId = null;
     room.turnOrder = [];
     room.messages = [];
     room.votes = {};
     room.eliminationOrder = [];
     room.imposters = [];
+    room.winner = null;
+    room.winReason = null;
+    room.guesserName = null;
+    if (room.reviewTimeout) {
+      clearTimeout(room.reviewTimeout);
+      room.reviewTimeout = null;
+    }
+    room.isReviewing = false;
+    room.reviewEndsAt = null;
 
-    // Reset player details but preserve host status, name, and connection
     room.players.forEach(p => {
       p.isAlive = true;
       p.role = null;
-      p.isReady = p.isHost; // Host is auto-ready, others need to ready-up
+      p.isReady = p.isHost;
       p.hasSubmittedClue = false;
       p.votedFor = null;
     });
 
-    console.log(`Room ${room.code} reset to lobby for play again.`);
     io.to(room.code).emit('playAgainNotice', {
       message: "New game starting! Returning to lobby..."
     });
 
     broadcastRoomState(room.code);
+    broadcastAvailableRooms();
   });
 
   // Leave room
@@ -481,6 +741,16 @@ io.on('connection', (socket) => {
 });
 
 function handlePlayerLeaving(socket) {
+  // First, check if socket has any pending join requests in any room and clean up
+  for (const room of rooms.values()) {
+    const idx = room.pendingRequests.findIndex(r => r.id === socket.id);
+    if (idx !== -1) {
+      room.pendingRequests.splice(idx, 1);
+      io.to(room.hostId).emit('pendingRequestsUpdate', room.pendingRequests);
+      broadcastRoomState(room.code);
+    }
+  }
+
   const playerInfo = socketToPlayer.get(socket.id);
   if (!playerInfo) return;
 
@@ -488,28 +758,32 @@ function handlePlayerLeaving(socket) {
   const room = rooms.get(roomCode);
   if (!room) return;
 
-  // Remove player from the room list
   room.players = room.players.filter(p => p.id !== socket.id);
   socketToPlayer.delete(socket.id);
 
-  console.log(`Player ${playerInfo.name} left room ${roomCode}`);
-
   if (room.players.length === 0) {
+    if (room.reviewTimeout) {
+      clearTimeout(room.reviewTimeout);
+      room.reviewTimeout = null;
+    }
+    // Notify any remaining pending requests
+    room.pendingRequests.forEach(req => {
+      io.to(req.id).emit('joinRejected', { message: 'Room has been closed.' });
+    });
     rooms.delete(roomCode);
-    console.log(`Room ${roomCode} deleted as it is empty.`);
+    broadcastAvailableRooms();
   } else {
     // If the host left, transfer host status to another connected player
     if (room.hostId === socket.id) {
       const newHost = room.players[0];
       newHost.isHost = true;
-      newHost.isReady = true; // New host becomes ready automatically
+      newHost.isReady = true;
       room.hostId = newHost.id;
-      console.log(`Host transferred to ${newHost.name} in room ${roomCode}`);
+      // Update pending requests for the new host
+      io.to(newHost.id).emit('pendingRequestsUpdate', room.pendingRequests);
     }
 
-    // If game was playing and player left, we might need to check win conditions or turns
     if (room.state === 'PLAYING') {
-      // If leaving player was current turn, advance
       if (room.currentPlayerTurnId === socket.id) {
         const currentIdx = room.turnOrder.indexOf(socket.id);
         let nextPlayer = null;
@@ -525,7 +799,6 @@ function handlePlayerLeaving(socket) {
         if (nextPlayer) {
           room.currentPlayerTurnId = nextPlayer.id;
         } else {
-          // Fallback or transition to voting
           room.state = 'VOTING';
           room.currentPlayerTurnId = null;
           room.players.forEach(p => p.votedFor = null);
@@ -533,21 +806,20 @@ function handlePlayerLeaving(socket) {
         }
       }
 
-      // Check win conditions
       const aliveCrew = room.players.filter(p => p.isAlive && p.role === 'CREWMATE').length;
       const aliveImposters = room.players.filter(p => p.isAlive && p.role === 'IMPOSTER').length;
 
       if (aliveImposters === 0) {
         room.state = 'GAMEOVER';
+        room.winner = 'CREWMATE';
       } else if (aliveImposters >= aliveCrew) {
         room.state = 'GAMEOVER';
+        room.winner = 'IMPOSTER';
       }
     } else if (room.state === 'VOTING') {
-      // Re-evaluate if all votes are in after someone left
       const alivePlayers = room.players.filter(p => p.isAlive);
       const votesCast = alivePlayers.filter(p => p.votedFor !== null).length;
       if (votesCast === alivePlayers.length && alivePlayers.length > 0) {
-        // Tally votes just like in submitVote
         let maxVotes = -1;
         let eliminatedId = null;
         let isTie = false;
@@ -580,8 +852,12 @@ function handlePlayerLeaving(socket) {
         const aliveCrew = room.players.filter(p => p.isAlive && p.role === 'CREWMATE').length;
         const aliveImposters = room.players.filter(p => p.isAlive && p.role === 'IMPOSTER').length;
 
-        if (aliveImposters === 0 || aliveImposters >= aliveCrew) {
+        if (aliveImposters === 0) {
           room.state = 'GAMEOVER';
+          room.winner = 'CREWMATE';
+        } else if (aliveImposters >= aliveCrew) {
+          room.state = 'GAMEOVER';
+          room.winner = 'IMPOSTER';
         } else {
           room.round += 1;
           room.players.forEach(p => {
@@ -590,6 +866,7 @@ function handlePlayerLeaving(socket) {
           });
           const aliveOnes = room.players.filter(p => p.isAlive);
           const randStart = aliveOnes[Math.floor(Math.random() * aliveOnes.length)];
+          room.roundFirstPlayerId = randStart.id;
           room.currentPlayerTurnId = randStart.id;
           room.state = 'PLAYING';
         }
@@ -597,6 +874,7 @@ function handlePlayerLeaving(socket) {
     }
 
     broadcastRoomState(roomCode);
+    broadcastAvailableRooms();
   }
 }
 
@@ -604,6 +882,8 @@ app.get("/alive", (req, res) => {
   res.send("OK Site Alive!");
 });
 
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+if (require.main === module) {
+  server.listen(PORT);
+}
+
+module.exports = { app, server, io, rooms, socketToPlayer, getAvailableRooms };

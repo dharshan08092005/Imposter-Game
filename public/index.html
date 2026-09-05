@@ -69,20 +69,38 @@
         <p class="subtitle">A real-time multiplayer word deduction game</p>
       </div>
 
-      <div class="card glass-card home-card">
-        <div class="form-group">
-          <label for="player-name">Your Name</label>
-          <input type="text" id="player-name" placeholder="Enter your name..." autocomplete="off" maxlength="15">
+      <div class="landing-grid">
+        <!-- Home Card (Create / Code Join) -->
+        <div class="card glass-card home-card">
+          <div class="form-group">
+            <label for="player-name">Your Name</label>
+            <input type="text" id="player-name" placeholder="Enter your name..." autocomplete="off" maxlength="15">
+          </div>
+
+          <div class="action-divider"><span>Host a Room</span></div>
+          <button id="create-room-btn" class="btn btn-primary btn-glow btn-full">Create New Game</button>
+
+          <div class="action-divider"><span>Or Join by Code</span></div>
+          <div class="join-row">
+            <input type="text" id="room-code-input" placeholder="6-digit code" autocomplete="off" maxlength="6"
+              aria-label="6-digit room code">
+            <button id="join-room-btn" class="btn btn-secondary">Join Game</button>
+          </div>
         </div>
 
-        <div class="action-divider"><span>Host a Room</span></div>
-        <button id="create-room-btn" class="btn btn-primary btn-glow">Create New Game</button>
-
-        <div class="action-divider"><span>Or Join Existing</span></div>
-        <div class="join-row">
-          <input type="text" id="room-code-input" placeholder="6-digit code" autocomplete="off" maxlength="6"
-            aria-label="6-digit room code">
-          <button id="join-room-btn" class="btn btn-secondary">Join Game</button>
+        <!-- Available Rooms Panel -->
+        <div class="card glass-card available-rooms-card">
+          <div class="available-rooms-header">
+            <div class="header-title-row">
+              <span class="live-pulse"></span>
+              <h3>Available Rooms</h3>
+            </div>
+            <button id="refresh-rooms-btn" class="btn btn-ghost-sm" title="Refresh available rooms">🔄 Refresh</button>
+          </div>
+          <p class="section-hint">Choose an open room below to request to join:</p>
+          <div id="available-rooms-container" class="available-rooms-list">
+            <div class="no-rooms-placeholder">No active open rooms found. Create one to play!</div>
+          </div>
         </div>
       </div>
     </section>
@@ -95,6 +113,20 @@
           <h2 class="room-code-title">ROOM: <span id="lobby-code-display" class="highlight">------</span></h2>
         </div>
         <button id="lobby-leave-btn" class="btn btn-danger-text">Leave</button>
+      </div>
+
+      <!-- Host Pending Join Requests Panel (Visible to Host) -->
+      <div id="lobby-requests-panel" class="card glass-card requests-card" style="display: none;">
+        <div class="requests-card-header">
+          <div class="requests-title">
+            <span class="requests-badge">APPROVAL REQUIRED</span>
+            <h3>Incoming Join Requests (<span id="requests-count">0</span>)</h3>
+          </div>
+          <span class="host-notice">You are the room head</span>
+        </div>
+        <div id="requests-list" class="requests-list">
+          <!-- Dynamic list of pending players with Accept & Decline buttons -->
+        </div>
       </div>
 
       <div class="lobby-grid">
@@ -139,8 +171,7 @@
             <!-- Non-hosts toggle ready status -->
             <button id="lobby-ready-btn" class="btn btn-secondary btn-full">Ready Up</button>
             <!-- Host starts game -->
-            <button id="lobby-start-btn" class="btn btn-primary btn-glow btn-full" style="display: none;">Start
-              Game</button>
+            <button id="lobby-start-btn" class="btn btn-primary btn-glow btn-full" style="display: none;">Start Game</button>
           </div>
         </div>
       </div>
@@ -153,12 +184,24 @@
           <span class="badge badge-accent">Round <span id="game-round-display">1</span></span>
           <span id="turn-badge" class="badge">Turn: <span id="current-turn-player-name">...</span></span>
         </div>
-        <button id="game-leave-btn" class="btn btn-danger-text">Leave</button>
+        <div class="game-header-actions">
+          <button id="imposter-open-guess-btn" class="btn btn-warning btn-sm" style="display: none;">🎯 Guess Word</button>
+          <button id="game-leave-btn" class="btn btn-danger-text">Leave</button>
+        </div>
       </div>
 
-      <!-- Secret Info Cards (Role & Word) -->
+      <!-- Secret Info Cards (Role, Word, & First-In-Round Hint) -->
       <div id="role-display-container">
         <!-- Dynamic based on role -->
+      </div>
+
+      <!-- Round Review Countdown Banner (When all clues submitted) -->
+      <div id="round-review-banner" class="round-review-banner card glass-card" style="display: none;">
+        <div class="review-pulse-icon">⏳</div>
+        <div class="review-text-wrap">
+          <h4>All clues submitted for Round <span id="review-round-num">1</span>!</h4>
+          <p>Review the clues below. Voting phase begins in <strong id="review-timer-seconds">5</strong>s...</p>
+        </div>
       </div>
 
       <div class="game-main-layout">
@@ -192,6 +235,9 @@
           <h2>Who is the Imposter?</h2>
           <p class="subtitle">Discuss clues and cast your vote below.</p>
         </div>
+        <div>
+          <button id="voting-open-guess-btn" class="btn btn-warning btn-sm" style="display: none;">🎯 Guess Word</button>
+        </div>
       </div>
 
       <div class="voting-layout">
@@ -203,6 +249,14 @@
             Waiting for players to submit votes...
           </div>
         </div>
+
+        <!-- Clues Reference Card during Voting -->
+        <div class="card glass-card voting-clues-card">
+          <h3>Round Clues Reference</h3>
+          <div id="voting-clues-container" class="clues-timeline">
+            <!-- Clues listed dynamically for reference -->
+          </div>
+        </div>
       </div>
     </section>
 
@@ -211,6 +265,10 @@
       <div class="gameover-banner card glass-card">
         <span class="badge badge-danger">Game Ended</span>
         <h2 id="winner-announcement" class="winner-title">CREWMATES WIN</h2>
+
+        <div id="gameover-reason-banner" class="win-reason-banner" style="display: none;">
+          <!-- Special announcement for guess wins -->
+        </div>
 
         <div class="secret-word-reveal">
           <span class="label">Secret Word</span>
@@ -272,7 +330,43 @@
     </section>
   </main>
 
-  <!-- CONFIRMATION DIALOG -->
+  <!-- WAITING FOR HOST ACCEPTANCE MODAL -->
+  <div id="join-waiting-dialog" class="modal-overlay">
+    <div class="modal-card glass-card text-center">
+      <div class="waiting-spinner-wrap">
+        <div class="radar-ping"></div>
+        <span class="spinner-icon">⏳</span>
+      </div>
+      <h2>Join Request Sent!</h2>
+      <p id="join-waiting-text">Waiting for the room head (<strong id="waiting-host-name">Host</strong>) of room <strong id="waiting-room-code">------</strong> to accept your request...</p>
+      <div class="modal-buttons" style="margin-top: 1.5rem;">
+        <button id="cancel-join-request-btn" class="btn btn-secondary btn-full">Cancel Request</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- IMPOSTER GUESS SECRET WORD MODAL -->
+  <div id="imposter-guess-dialog" class="modal-overlay">
+    <div class="modal-card glass-card">
+      <div class="guess-modal-header">
+        <span class="badge badge-danger">High Stakes Bluff</span>
+        <h2>🎯 Guess Secret Word</h2>
+      </div>
+      <p style="margin-bottom: 1rem; font-size: 0.95rem; color: var(--text-muted);">
+        If your guess is correct, <strong>the Imposters win immediately</strong>! If incorrect, you will be eliminated.
+      </p>
+      <div class="form-group">
+        <label for="imposter-guess-input">Your Word Guess</label>
+        <input type="text" id="imposter-guess-input" placeholder="Type the secret word..." maxlength="30" autocomplete="off">
+      </div>
+      <div class="modal-buttons">
+        <button id="imposter-guess-cancel-btn" class="btn btn-secondary">Cancel</button>
+        <button id="imposter-guess-submit-btn" class="btn btn-primary btn-glow">Submit Guess</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONFIRMATION DIALOG (PLAY AGAIN) -->
   <div id="confirmation-dialog" class="modal-overlay">
     <div class="modal-card glass-card">
       <h2>Start another game?</h2>

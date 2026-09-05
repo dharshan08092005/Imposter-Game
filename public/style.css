@@ -360,7 +360,7 @@ input[type="text"]:focus {
 /* LANDING SCREEN SPECIFIC */
 #landing-screen {
   align-items: center;
-  max-width: 480px;
+  max-width: 960px;
 }
 
 .hero-brand {
@@ -697,15 +697,20 @@ input[type="text"]:focus {
 
 /* VOTING SCREEN SPECIFIC */
 .voting-layout {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
   gap: 1.5rem;
   width: 100%;
+  align-items: start;
+}
+
+@media (max-width: 820px) {
+  .voting-layout {
+    grid-template-columns: 1fr;
+  }
 }
 
 .voting-card {
-  max-width: 700px;
-  margin: 0 auto;
   width: 100%;
 }
 
@@ -1014,7 +1019,482 @@ input[type="text"]:focus {
   border-left-color: var(--danger);
 }
 
+.toast.toast-success {
+  border-left-color: var(--success);
+}
+
 @keyframes toast-slide {
   from { opacity: 0; transform: translateY(-20px) scale(0.9); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
+
+/* ==========================================================================
+   LANDING DUAL-CARD & AVAILABLE ROOMS
+   ========================================================================== */
+
+.landing-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.15fr;
+  gap: 1.5rem;
+  width: 100%;
+  align-items: stretch;
+}
+
+@media (max-width: 820px) {
+  .landing-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.available-rooms-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-height: 380px;
+}
+
+.available-rooms-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border-glass);
+  padding-bottom: 0.75rem;
+}
+
+.header-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.header-title-row h3 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.live-pulse {
+  width: 10px;
+  height: 10px;
+  background: var(--success);
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 10px var(--success);
+  animation: pulse-dot 2s infinite;
+}
+
+@keyframes pulse-dot {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+  70% { transform: scale(1.1); box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+
+.btn-ghost-sm {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-glass);
+  color: var(--text-muted);
+  padding: 0.4rem 0.85rem;
+  font-size: 0.8rem;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-ghost-sm:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-main);
+  transform: translateY(-1px);
+}
+
+.section-hint {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: -0.25rem;
+}
+
+.available-rooms-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.room-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-glass);
+  border-radius: 14px;
+  padding: 0.85rem 1.15rem;
+  transition: all var(--transition-fast);
+  gap: 0.75rem;
+}
+
+.room-card:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(99, 102, 241, 0.4);
+  transform: translateY(-2px);
+}
+
+.room-card-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.room-card-code {
+  font-family: var(--font-logo);
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.room-card-host {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+}
+
+.room-card-count {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin-top: 0.2rem;
+}
+
+.btn-sm {
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  border-radius: 10px;
+}
+
+.btn-join-room {
+  font-size: 0.85rem;
+  padding: 0.55rem 1.1rem;
+}
+
+.no-rooms-placeholder {
+  text-align: center;
+  padding: 2.5rem 1rem;
+  color: var(--text-dim);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.no-rooms-placeholder span {
+  font-size: 2rem;
+  opacity: 0.6;
+}
+
+/* ==========================================================================
+   HOST JOIN REQUESTS APPROVAL PANEL
+   ========================================================================== */
+
+.requests-card {
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.05);
+  margin-bottom: 1.25rem;
+  animation: glow-pulse 3s infinite alternate;
+}
+
+@keyframes glow-pulse {
+  0% { box-shadow: 0 0 10px rgba(245, 158, 11, 0.08); }
+  100% { box-shadow: 0 0 22px rgba(245, 158, 11, 0.25); }
+}
+
+.requests-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid rgba(245, 158, 11, 0.25);
+  padding-bottom: 0.75rem;
+}
+
+.requests-badge {
+  font-size: 0.7rem;
+  font-weight: 800;
+  background: rgba(245, 158, 11, 0.25);
+  color: var(--warning);
+  padding: 0.2rem 0.6rem;
+  border-radius: 20px;
+  letter-spacing: 0.05em;
+  display: inline-block;
+  margin-bottom: 0.25rem;
+}
+
+.requests-title h3 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.host-notice {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.requests-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.request-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(18, 20, 38, 0.7);
+  border: 1px solid var(--border-glass);
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  gap: 1rem;
+}
+
+.request-name {
+  font-size: 0.95rem;
+  color: var(--text-main);
+}
+
+.request-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-success {
+  background: linear-gradient(135deg, hsl(142, 70%, 45%), hsl(160, 70%, 40%));
+  color: #fff;
+  border: none;
+  font-weight: 700;
+}
+
+.btn-success:hover {
+  filter: brightness(1.15);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.35);
+}
+
+.btn-danger-sm {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.btn-danger-sm:hover {
+  background: rgba(239, 68, 68, 0.25);
+  transform: translateY(-1px);
+}
+
+/* ==========================================================================
+   WAITING MODAL RADAR ANIMATION
+   ========================================================================== */
+
+.waiting-spinner-wrap {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 1.25rem auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.radar-ping {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 2px solid var(--primary);
+  animation: radar-ping 1.8s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+}
+
+@keyframes radar-ping {
+  0% { transform: scale(0.5); opacity: 1; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+.spinner-icon {
+  font-size: 2rem;
+  z-index: 2;
+}
+
+/* ==========================================================================
+   IMPOSTER FIRST IN ROUND HINT
+   ========================================================================== */
+
+.imposter-hint-box {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15));
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: 14px;
+  padding: 1.1rem 1.25rem;
+  margin-top: 1rem;
+  text-align: left;
+  animation: hint-glow 2.5s infinite alternate;
+}
+
+@keyframes hint-glow {
+  0% { box-shadow: 0 0 10px rgba(245, 158, 11, 0.1); }
+  100% { box-shadow: 0 0 20px rgba(245, 158, 11, 0.25); }
+}
+
+.hint-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.4rem;
+}
+
+.hint-badge {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #000;
+  background: var(--warning);
+  padding: 0.2rem 0.6rem;
+  border-radius: 20px;
+  letter-spacing: 0.05em;
+}
+
+.hint-subtitle {
+  font-size: 0.8rem;
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.hint-text {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 0.4rem 0;
+}
+
+.hint-tip {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* ==========================================================================
+   IMPOSTER GUESS BUTTON & MODAL
+   ========================================================================== */
+
+.btn-warning {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #000;
+  font-weight: 800;
+  border: none;
+}
+
+.btn-warning:hover {
+  filter: brightness(1.15);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(245, 158, 11, 0.35);
+}
+
+.game-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.guess-modal-header {
+  margin-bottom: 1rem;
+}
+
+.guess-modal-header h2 {
+  margin-top: 0.5rem;
+}
+
+/* ==========================================================================
+   GAME OVER WIN REASON BANNER
+   ========================================================================== */
+
+.win-reason-banner {
+  margin: 1rem 0;
+  padding: 1.15rem 1.5rem;
+  border-radius: 16px;
+  text-align: center;
+  font-size: 1.05rem;
+  line-height: 1.5;
+}
+
+.win-reason-banner.guess-win {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.25), rgba(245, 158, 11, 0.25));
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  color: #fef08a;
+  box-shadow: 0 0 25px rgba(245, 158, 11, 0.25);
+  animation: banner-pulse 2s infinite alternate;
+}
+
+@keyframes banner-pulse {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.01); }
+}
+
+/* ==========================================================================
+   ROUND REVIEW COUNTDOWN BANNER & VOTING CLUES
+   ========================================================================== */
+
+.round-review-banner {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(99, 102, 241, 0.15));
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  padding: 1.15rem 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  border-radius: 16px;
+  margin-bottom: 1.25rem;
+  animation: review-glow 2.5s infinite alternate;
+}
+
+@keyframes review-glow {
+  0% { box-shadow: 0 0 10px rgba(245, 158, 11, 0.1); }
+  100% { box-shadow: 0 0 25px rgba(245, 158, 11, 0.3); }
+}
+
+.review-pulse-icon {
+  font-size: 2.2rem;
+  animation: pulse-icon 1.5s infinite;
+  flex-shrink: 0;
+}
+
+@keyframes pulse-icon {
+  0% { transform: scale(0.95); }
+  50% { transform: scale(1.15); }
+  100% { transform: scale(0.95); }
+}
+
+.review-text-wrap h4 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 0.25rem;
+}
+
+.review-text-wrap p {
+  font-size: 0.95rem;
+  color: var(--text-muted);
+}
+
+.review-text-wrap strong {
+  color: var(--warning);
+  font-size: 1.15rem;
+}
+
+.voting-clues-card {
+  display: flex;
+  flex-direction: column;
+  max-height: 480px;
+}
+
+.voting-clues-card .clues-timeline {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 0.35rem;
+}
+
+
